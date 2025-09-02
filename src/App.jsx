@@ -1,105 +1,108 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import styles from './App.module.css'
 
 export function App() {
-	const [email, setEmail] = useState('')
-	const [emailError, setEmailerror] = useState(null)
-	const [password, setPassword] = useState('')
-	const [passwordError, setPasswordError] = useState(null)
-	const [repeatPassword, setRepeatPassword] = useState('')
-	const [repeatPasswordError, setRepeatPasswordError] = useState(null)
+	const [formData, setFormData] = useState({email: '', password: '', repeatPassword: ''})
+	const [errors, setErrors] = useState({email: null, password: null, repeatPassword: null})
 
 	const submitButtonRef = useRef(null)
 
-	const onEmailChange = ({ target }) => {
-		setEmail(target.value)
-
-		if (emailError) {
-			setEmailerror(null)
+	const isEmailValid = useCallback((email) => {
+		if (!/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(email)) {
+			return 'Неверный email. Проверьте ваш email на соответствие RFC 5322'
 		}
-	}
+		return null
+	}, [])
 
-	const onEmailBlur = ({ target }) => {
-		if (!/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(target.value)) {
-			setEmailerror('Неверный email. Проверьте ваш email на соответствие RFC 5322')
-		} else {
-			setEmailerror(null)
+	const isPasswordValid = useCallback((password) => {
+		if (!/(?=.*[a-z])(?=.*[A-Z])/.test(password)) {
+			return 'Некорректный пароль. Пароль должен содержать хотя бы 1 строчную и 1 заглавную букву'
 		}
-	}
-
-	const onPasswordChange = ({ target }) => {
-		setPassword(target.value)
-
-		if (passwordError) {
-			setPasswordError(null)
+		if (!/(?=.*\d)(?=.*[!@#$%^&*])/.test(password)) {
+			return 'Некорректный пароль. Пароль должен содержать хотя бы 1 цифру и символ !@#$%^&*'
 		}
-	}
+		if (password.length < 8) {
+			return 'Некорректный пароль. Пароль должен быть не менее 8 символов'
+		}
+		return null
+	}, [])
 
-	const onPasswordBlur = ({ target }) => {
+	const validateField = useCallback((name, value, passwordValue = formData.password) => {
+		switch (name) {
+			case 'email':
+				return isEmailValid(value)
+			case 'password':
+				return isPasswordValid(value)
+			case 'repeatPassword':
+				if (!value) return 'Ошибка. Повторите пароль'
+				if (passwordValue !== value) return 'Некорректный повтор пароля. Пароли должны совпадать'
+				return null
+			default:
+				return null
+		}
+	}, [formData.password, isEmailValid, isPasswordValid])
 
-		let newError = null
+	const onHandleChange = (e) => {
+		const { name, value } = e.target
+		setFormData(form => ({...form, [name]: value}))
 
-		 if (!/(?=.*[a-z])(?=.*[A-Z])/.test(target.value)) {
-			newError = 'Некорректный пароль. Пароль должен содержать хотя бы 1 строчную и 1 заглавную букву'
-		} else if (!/(?=.*\d)(?=.*[!@#$%^&*])/.test(target.value)) {
-			newError = 'Некорректный пароль. Пароль должен содержать хотя бы 1 цифру и символ !@#$%^&*'
-		} else if (target.value.length < 8) {
-			newError = 'Некорректный пароль. Пароль должен быть не менее 8 символов'
+		if (errors[name]) {
+			setErrors(error => ({...error, [name]: null}))
 		}
 
-		setPasswordError(newError)
-
-		if (target.value !== '' && repeatPassword !== '') {
-			if (target.value !== repeatPassword) {
-				setRepeatPasswordError('Некорректный повтор пароля. Пароли должны совпадать')
-			} else {
-				setRepeatPasswordError(null)
+		if (name === 'password') {
+			const repeatPass = formData.repeatPassword
+			if (repeatPass) {
+				const repeatError = validateField('repeatPassword', repeatPass, value)
+				setErrors(error => ({...error, repeatPassword: repeatError}))
 			}
 		}
 	}
 
-	const onRepeadPasswordChange = ({ target }) => {
-		setRepeatPassword(target.value)
-
-		if (repeatPasswordError) {
-			setRepeatPasswordError(null)
-		}
-		if (target.value === password && email !== '' & password !== '') {
-			submitButtonRef.current.focus()
-		}
-	}
-
-	const onRepeadPasswordBlur = ({ target }) => {
-		if (password !== '' && target.value !== '') {
-			if (password !== target.value) {
-				setRepeatPasswordError('Некорректный повтор пароля. Пароли должны совпадать')
-			} else {
-				setRepeatPasswordError(null)
-			}
-		}
-
-		if (isFormvalid) {
-			submitButtonRef.current.focus()
-		}
+	const onHandleBlur = (e) => {
+		const { name, value } = e.target
+		const newError = validateField(name, value)
+		setErrors(error => ({...error, [name]: newError}))
 	}
 
 	const onSubmit = (event) => {
 		event.preventDefault()
-		console.log(email, password, repeatPassword)
+
+		const newErrors = Object.fromEntries(
+			Object.keys(formData).map(key => [key, validateField(key, formData[key])])
+		)
+
+		setErrors(newErrors)
+
+		if (Object.values(newErrors).some(error => error !== null)) return
+
+		console.log(formData.email, formData.password, formData.repeatPassword)
 	}
 
-	const isFormvalid = emailError === null && passwordError === null && repeatPasswordError === null
+	useEffect(() => {
+		const { email, password, repeatPassword } = formData
+
+		const isEmailValidResult = isEmailValid(email)
+		const isPasswordValidResult = isPasswordValid(password)
+		const passwordsMatch = password && password === repeatPassword
+
+		if (!isEmailValidResult && !isPasswordValidResult && passwordsMatch) {
+			submitButtonRef.current?.focus()
+		}
+	}, [formData, isEmailValid, isPasswordValid])
+
+	const isFormValid = Object.values(errors).every(error => error === null)
 
   return (
     <div className={styles.app}>
 		<form className={styles.formLabel} onSubmit={onSubmit}>Новый пользователь
-			{emailError && <div className={styles.errorLabel}>{emailError}</div>}
-			{passwordError && <div className={styles.errorLabel}>{passwordError}</div>}
-			{repeatPasswordError && <div className={styles.errorLabel}>{repeatPasswordError}</div>}
-			<input name='email' type="text" value={email} placeholder='Email' onChange={onEmailChange} onBlur={onEmailBlur} />
-			<input name='password' type="password" placeholder='Пароль' onChange={onPasswordChange} onBlur={onPasswordBlur} />
-			<input name='repeadPassword' type="password" placeholder='Повторите пароль' onChange={(onRepeadPasswordChange)} onBlur={onRepeadPasswordBlur} />
-			<button ref={submitButtonRef} type='submit' disabled={!isFormvalid}>Зарегистрироваться</button>
+			{errors.email && <div className={styles.errorLabel}>{errors.email}</div>}
+			{errors.password && <div className={styles.errorLabel}>{errors.password}</div>}
+			{errors.repeatPassword && <div className={styles.errorLabel}>{errors.repeatPassword}</div>}
+			<input name='email' type="text" value={formData.email} placeholder='Email' onChange={onHandleChange} onBlur={onHandleBlur} />
+			<input name='password' type="password" value={formData.password} placeholder='Пароль' onChange={onHandleChange} onBlur={onHandleBlur} />
+			<input name='repeatPassword' type="password" value={formData.repeatPassword} placeholder='Повторите пароль' onChange={onHandleChange} onBlur={onHandleBlur} />
+			<button ref={submitButtonRef} type='submit' disabled={!isFormValid}>Зарегистрироваться</button>
 		</form>
 	</div>
   )
